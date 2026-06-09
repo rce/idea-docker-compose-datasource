@@ -37,7 +37,10 @@ intellijPlatform {
     pluginConfiguration {
         ideaVersion {
             sinceBuild = "243"
-            untilBuild = "251.*"
+            // No upper bound, so the plugin isn't blocked on newer IDEs (e.g. 2026.1
+            // / build 261) during internal testing. It's compiled against the 2024.3
+            // SDK but only uses stable APIs.
+            untilBuild = provider { null }
         }
     }
 }
