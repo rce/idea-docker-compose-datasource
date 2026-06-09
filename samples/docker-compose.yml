@@ -1,0 +1,22 @@
+services:
+  cat-db:
+    image: postgres:16
+    container_name: whiskers_pg
+    environment:
+      POSTGRES_USER: meow
+      POSTGRES_PASSWORD: nyaa
+      POSTGRES_DB: catdb
+    ports:
+      - "5433:5432"
+
+  gis:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_PASSWORD: purr
+    ports:
+      - "127.0.0.1:6543:5432"
+
+  cache:
+    image: redis:7
+    ports:
+      - "6379:6379"

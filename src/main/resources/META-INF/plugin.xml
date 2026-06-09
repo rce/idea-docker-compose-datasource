@@ -1,0 +1,35 @@
+<idea-plugin>
+    <id>com.github.dockercomposedatasource</id>
+    <name>Docker Compose Postgres Datasources</name>
+    <vendor>Docker Compose Datasource</vendor>
+
+    <description><![CDATA[
+        Scans <code>docker-compose</code> / <code>compose</code> YAML files in the project for
+        PostgreSQL services and registers them as IDE database data sources.
+        <br/>
+        Run <b>Tools | Sync Docker Compose Datasources</b>, or let the plugin scan automatically
+        when a project opens.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.database</depends>
+    <depends>org.jetbrains.plugins.yaml</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <postStartupActivity
+            implementation="com.github.dockercomposedatasource.ComposeStartupActivity"/>
+        <notificationGroup
+            id="Docker Compose Datasources"
+            displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <action
+            id="com.github.dockercomposedatasource.SyncComposeDatasourcesAction"
+            class="com.github.dockercomposedatasource.SyncComposeDatasourcesAction"
+            text="Sync Docker Compose Datasources"
+            description="Scan docker-compose files for PostgreSQL services and register them as data sources">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>
