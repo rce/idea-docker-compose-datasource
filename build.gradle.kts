@@ -66,7 +66,11 @@ intellijPlatform {
 
     publishing {
         token = providers.environmentVariable("PUBLISH_TOKEN")
-        // channels default to ["default"] (stable). Override per release if needed.
+        // Publish to the "default" (stable) channel unless -PpublishChannel=<name> is
+        // given (e.g. "eap" or "beta" for pre-releases).
+        channels = providers.gradleProperty("publishChannel")
+            .map { listOf(it) }
+            .orElse(listOf("default"))
     }
 
     pluginVerification {

@@ -2,6 +2,7 @@
 .kotlin/
 build/
 .intellijPlatform/
+.secrets/
 .idea/
 *.iml
 out/
