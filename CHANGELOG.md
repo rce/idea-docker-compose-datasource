@@ -3,6 +3,10 @@
 All notable changes to this plugin are documented here. The entries under the
 most recent version are shown as the change notes on the JetBrains Marketplace.
 
+## [0.3.0]
+
+- Update to current IntelliJ Platform APIs (no deprecated usages; verified compatible with 2024.3 through 2026.2).
+
 ## [0.2.0]
 
 - Persist compose passwords into the IDE credential store so connections work without a manual password prompt, and heal data sources that were missing one.
