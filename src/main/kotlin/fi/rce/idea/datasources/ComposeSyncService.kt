@@ -41,14 +41,17 @@ class ComposeSyncService(private val project: Project) {
     private val postgresDriverClass = "org.postgresql.Driver"
 
     fun sync(): SyncResult {
-        val (files, discovered) = ReadAction.compute<Pair<List<String>, List<PostgresService>>, RuntimeException> {
+        // sync() always runs off the EDT (background task / startup coroutine), so a
+        // synchronous non-blocking read action is safe and avoids the deprecated
+        // blocking read-action helpers.
+        val (files, discovered) = ReadAction.nonBlocking<Pair<List<String>, List<PostgresService>>> {
             val composeFiles = ComposeFileScanner.findComposeFiles(project)
             val services = composeFiles.flatMap { file ->
                 val text = runCatching { VfsUtilCore.loadText(file) }.getOrNull() ?: return@flatMap emptyList()
                 ComposeParser.parse(text, file.path)
             }
             composeFiles.map { it.path } to services
-        }
+        }.executeSynchronously()
         val filesScanned = files.size
         // A data source is identified by its connection URL; the same database
         // referenced by several compose files (e.g. copies under cdk.out) collapses
@@ -141,7 +144,7 @@ class ComposeSyncService(private val project: Project) {
             .withUser(svc.user)
             .commit()
 
-        for (dataSource in registry.newDataSources) {
+        for (dataSource in registry.dataSources) {
             // Tag so we can recognize and reconcile it later.
             dataSource.setAdditionalProperty(MANAGED_KEY, MANAGED_VALUE)
             // Compose passwords are plaintext in the file already, so persist them into
