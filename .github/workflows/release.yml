@@ -1,8 +1,14 @@
 name: Release
 
 # Verifies and publishes the plugin to the JetBrains Marketplace when a GitHub
-# release is published (or when triggered manually). Configure these repository
-# secrets first: PUBLISH_TOKEN, CERTIFICATE_CHAIN, PRIVATE_KEY, PRIVATE_KEY_PASSWORD.
+# release is published (or when triggered manually). The version published is the
+# one in build.gradle.kts — keep it in sync with the release tag.
+#
+# Required repository secrets:
+#   PUBLISH_TOKEN          JetBrains Marketplace permanent token
+#   CERTIFICATE_CHAIN      signing certificate chain (PEM)
+#   PRIVATE_KEY            signing private key (PEM)
+#   PRIVATE_KEY_PASSWORD   passphrase for the private key
 on:
   release:
     types: [ published ]
@@ -12,6 +18,8 @@ jobs:
   publish:
     name: Verify & publish
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to attach the signed zip to the release
     steps:
       - uses: actions/checkout@v4
 
@@ -23,13 +31,22 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run tests
+        run: ./gradlew test
+
       - name: Verify plugin compatibility
         run: ./gradlew verifyPlugin
 
-      - name: Publish plugin
+      - name: Publish to JetBrains Marketplace
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
         run: ./gradlew publishPlugin
+
+      - name: Attach signed plugin to the GitHub release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" build/distributions/*-signed.zip --clobber
