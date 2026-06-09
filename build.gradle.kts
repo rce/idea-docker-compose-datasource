@@ -4,7 +4,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.16.0"
 }
 
-group = "com.github.dockercomposedatasource"
+group = "fi.rce.idea.datasources"
 version = "0.2.0"
 
 repositories {
@@ -33,16 +33,62 @@ dependencies {
     testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.11.3")
 }
 
+// Computed eagerly at configuration time (a plain String) so it is safe to store in
+// the Gradle configuration cache, unlike a provider lambda that captures the script.
+val changelogFile = layout.projectDirectory.file("CHANGELOG.md").asFile
+val changeNotesHtml: String =
+    if (changelogFile.exists()) latestChangelogHtml(changelogFile.readText()) else ""
+
 intellijPlatform {
     pluginConfiguration {
+        vendor {
+            name = "Henry Heikkinen"
+            email = "rce@rce.fi"
+            url = "https://github.com/rce/idea-docker-compose-datasource"
+        }
+        // Show the notes for the most recent CHANGELOG version on the listing.
+        changeNotes = changeNotesHtml
         ideaVersion {
             sinceBuild = "243"
-            // No upper bound, so the plugin isn't blocked on newer IDEs (e.g. 2026.1
-            // / build 261) during internal testing. It's compiled against the 2024.3
-            // SDK but only uses stable APIs.
+            // No upper bound, so the plugin isn't blocked on newer IDEs. Compiled
+            // against the 2024.3 SDK but only uses stable APIs; verifyPlugin guards.
             untilBuild = provider { null }
         }
     }
+
+    // JetBrains Marketplace requires signed plugins. Secrets come from the
+    // environment (or ~/.gradle/gradle.properties) — never commit them.
+    signing {
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+    }
+
+    publishing {
+        token = providers.environmentVariable("PUBLISH_TOKEN")
+        // channels default to ["default"] (stable). Override per release if needed.
+    }
+
+    pluginVerification {
+        ides {
+            recommended()
+        }
+    }
+}
+
+/** Renders the bullet list under the top-most `## [x.y.z]` section as simple HTML. */
+fun latestChangelogHtml(changelog: String): String {
+    val lines = changelog.lines()
+    val start = lines.indexOfFirst { it.startsWith("## ") }
+    if (start < 0) return ""
+    val rest = lines.drop(start + 1)
+    val end = rest.indexOfFirst { it.startsWith("## ") }
+    val section = if (end < 0) rest else rest.take(end)
+    val items = section
+        .map { it.trimStart() }
+        .filter { it.startsWith("- ") || it.startsWith("* ") }
+        .map { "<li>${it.drop(2).trim()}</li>" }
+    return if (items.isEmpty()) "" else "<ul>${items.joinToString("")}</ul>"
 }
 
 kotlin {

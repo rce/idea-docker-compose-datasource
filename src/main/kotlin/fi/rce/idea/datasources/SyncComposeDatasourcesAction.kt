@@ -1,4 +1,4 @@
-package com.github.dockercomposedatasource
+package fi.rce.idea.datasources
 
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.progress.ProgressIndicator

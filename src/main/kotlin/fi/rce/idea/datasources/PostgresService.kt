@@ -1,4 +1,4 @@
-package com.github.dockercomposedatasource
+package fi.rce.idea.datasources
 
 /**
  * A PostgreSQL service discovered in a docker-compose file, normalized into the

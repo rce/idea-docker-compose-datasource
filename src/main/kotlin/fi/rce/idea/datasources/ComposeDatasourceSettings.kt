@@ -1,4 +1,4 @@
-package com.github.dockercomposedatasource
+package fi.rce.idea.datasources
 
 import com.intellij.openapi.components.PersistentStateComponent
 import com.intellij.openapi.components.Service

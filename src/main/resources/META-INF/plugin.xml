@@ -1,14 +1,31 @@
 <idea-plugin>
-    <id>com.github.dockercomposedatasource</id>
+    <id>fi.rce.idea.datasources</id>
     <name>Docker Compose Postgres Datasources</name>
-    <vendor>Docker Compose Datasource</vendor>
 
     <description><![CDATA[
-        Scans <code>docker-compose</code> / <code>compose</code> YAML files in the project for
-        PostgreSQL services and registers them as IDE database data sources.
-        <br/>
-        Run <b>Tools | Sync Docker Compose Datasources</b>, or let the plugin scan automatically
-        when a project opens.
+        <p>Turns the PostgreSQL services in your <code>docker-compose</code> files into
+        ready-to-use database connections.</p>
+
+        <p>On project open &mdash; and on demand via
+        <b>Tools | Sync Docker Compose Datasources</b> &mdash; the plugin scans
+        <code>docker-compose*.yml</code> / <code>compose*.yml</code> for
+        <code>postgres</code> / <code>postgis</code> services and registers each as a
+        PostgreSQL data source pointing at the published host port, with the user,
+        database and password filled in so you can connect in one click.</p>
+
+        <ul>
+          <li>Reads <code>POSTGRES_USER</code>, <code>POSTGRES_DB</code>,
+          <code>POSTGRES_PASSWORD</code> and the host port published for container
+          port <code>5432</code> (short and long <code>ports</code> syntax).</li>
+          <li>Reconciles on every sync: adds new services, updates changed ones, and
+          removes services that were deleted from compose.</li>
+          <li>Only ever touches data sources it created &mdash; your own connections
+          are never modified.</li>
+          <li>Skips build output, <code>node_modules</code>, <code>cdk.out</code> and
+          other IDE-excluded or VCS-ignored locations.</li>
+        </ul>
+
+        <p><b>Requires IntelliJ IDEA Ultimate</b> (uses the bundled Database Tools).</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -17,7 +34,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity
-            implementation="com.github.dockercomposedatasource.ComposeStartupActivity"/>
+            implementation="fi.rce.idea.datasources.ComposeStartupActivity"/>
         <notificationGroup
             id="Docker Compose Datasources"
             displayType="BALLOON"/>
@@ -25,8 +42,8 @@
 
     <actions>
         <action
-            id="com.github.dockercomposedatasource.SyncComposeDatasourcesAction"
-            class="com.github.dockercomposedatasource.SyncComposeDatasourcesAction"
+            id="fi.rce.idea.datasources.SyncComposeDatasourcesAction"
+            class="fi.rce.idea.datasources.SyncComposeDatasourcesAction"
             text="Sync Docker Compose Datasources"
             description="Scan docker-compose files for PostgreSQL services and register them as data sources">
             <add-to-group group-id="ToolsMenu" anchor="last"/>

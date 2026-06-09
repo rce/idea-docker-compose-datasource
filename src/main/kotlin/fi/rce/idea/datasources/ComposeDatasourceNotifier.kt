@@ -1,4 +1,4 @@
-package com.github.dockercomposedatasource
+package fi.rce.idea.datasources
 
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationGroupManager

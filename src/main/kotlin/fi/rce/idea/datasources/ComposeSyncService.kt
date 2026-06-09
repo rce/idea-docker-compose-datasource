@@ -1,4 +1,4 @@
-package com.github.dockercomposedatasource
+package fi.rce.idea.datasources
 
 import com.intellij.credentialStore.OneTimeString
 import com.intellij.database.access.DatabaseCredentials

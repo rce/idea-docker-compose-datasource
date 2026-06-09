@@ -1,4 +1,4 @@
-package com.github.dockercomposedatasource
+package fi.rce.idea.datasources
 
 import com.intellij.database.dataSource.LocalDataSourceManager
 import com.intellij.openapi.application.runWriteAction

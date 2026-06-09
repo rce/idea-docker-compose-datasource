@@ -46,9 +46,31 @@ included `samples/docker-compose.yml` is a good test) and run the Tools action.
 
 | Path | Purpose |
 | --- | --- |
-| `ComposeFileScanner` | Finds compose files in content roots. |
+| `ComposeFileScanner` | Finds compose files, skipping excluded/ignored locations. |
 | `ComposeParser` | Parses YAML → `PostgresService` (pure, unit-tested). |
-| `ComposeSyncService` | Dedups and registers data sources via the Database API. |
+| `ComposeSyncService` | Reconciles data sources via the Database API. |
 | `SyncComposeDatasourcesAction` | Tools-menu manual trigger. |
 | `ComposeStartupActivity` | Auto-scan on project open. |
 | `ComposeDatasourceSettings` | Per-project toggle for the auto-scan. |
+
+## Publishing to the JetBrains Marketplace
+
+The plugin is signed and published with the standard Gradle tasks. Provide these
+secrets via the environment (or `~/.gradle/gradle.properties`) — never commit them:
+
+| Variable | Purpose |
+| --- | --- |
+| `PUBLISH_TOKEN` | Marketplace API token (Marketplace → My Tokens). |
+| `CERTIFICATE_CHAIN`, `PRIVATE_KEY`, `PRIVATE_KEY_PASSWORD` | Plugin [signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html) key. |
+
+```sh
+./gradlew verifyPlugin   # compatibility check (same as Marketplace runs)
+./gradlew signPlugin     # produces build/distributions/*-signed.zip
+./gradlew publishPlugin  # signs + uploads to the "default" channel
+```
+
+The **first** version is uploaded manually via the Marketplace web UI (to set
+category, license and screenshots) and goes through a one-time review. After that,
+`publishPlugin` — or the `.github/workflows/release.yml` workflow on a published
+GitHub release — handles updates. Bump `version` and add a `## [x.y.z]` section to
+`CHANGELOG.md` for each release; the latest section becomes the listing's change notes.
