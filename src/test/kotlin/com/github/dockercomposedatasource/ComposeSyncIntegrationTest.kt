@@ -60,6 +60,26 @@ class ComposeSyncIntegrationTest : BasePlatformTestCase() {
         assertEquals("meow", ds.username)
     }
 
+    fun `test compose password is persisted into the credential store`() {
+        myFixture.addFileToProject("docker-compose.yml", composeYaml)
+
+        ComposeSyncService.getInstance(project).sync()
+
+        val ds = managedDataSources().single()
+        val credentials = com.intellij.database.dataSource.DatabaseCredentialsAuthProvider.getCredentials(ds)
+        assertEquals("nyaa", credentials?.getPasswordAsString())
+    }
+
+    fun `test same connection in multiple compose files yields one data source`() {
+        // Simulates copies (e.g. under cdk.out) defining the same database.
+        myFixture.addFileToProject("docker-compose.yml", composeYaml)
+        myFixture.addFileToProject("sub/dir/docker-compose.yml", composeYaml)
+
+        val result = ComposeSyncService.getInstance(project).sync()
+        assertEquals(1, result.added.size)
+        assertEquals(1, managedDataSources().size)
+    }
+
     fun `test repeated sync is idempotent`() {
         myFixture.addFileToProject("docker-compose.yml", composeYaml)
         val sync = ComposeSyncService.getInstance(project)

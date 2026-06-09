@@ -1,6 +1,9 @@
 package com.github.dockercomposedatasource
 
+import com.intellij.credentialStore.OneTimeString
+import com.intellij.database.access.DatabaseCredentials
 import com.intellij.database.autoconfig.DataSourceRegistry
+import com.intellij.database.dataSource.DatabaseCredentialsAuthProvider
 import com.intellij.database.dataSource.LocalDataSource
 import com.intellij.database.dataSource.LocalDataSourceManager
 import com.intellij.openapi.application.ApplicationManager
@@ -47,11 +50,14 @@ class ComposeSyncService(private val project: Project) {
             composeFiles.map { it.path } to services
         }
         val filesScanned = files.size
-        val desired = discovered.distinctBy { it.managedId }
+        // A data source is identified by its connection URL; the same database
+        // referenced by several compose files (e.g. copies under cdk.out) collapses
+        // to a single data source.
+        val desired = discovered.distinctBy { it.jdbcUrl }
 
         thisLogger().info(
-            "Compose scan: ${files.size} compose file(s) $files; " +
-                "discovered ${desired.size} postgres service(s) ${desired.map { it.managedId }}",
+            "Compose scan: ${files.size} compose file(s); discovered ${desired.size} " +
+                "unique postgres connection(s) ${desired.map { it.jdbcUrl }}",
         )
 
         val added = mutableListOf<PostgresService>()
@@ -61,44 +67,43 @@ class ComposeSyncService(private val project: Project) {
 
         runOnEdt {
             val manager = LocalDataSourceManager.getInstance(project)
-            val all = manager.dataSources
-            val managed = all.mapNotNull { ds ->
-                ds.getAdditionalProperty(MANAGED_KEY)?.let { id -> id to ds }
-            }.toMap()
-            val existingUrls = all.mapNotNull { it.url }.toSet()
-            val desiredIds = desired.map { it.managedId }.toSet()
+            val managed = manager.dataSources.filter { it.getAdditionalProperty(MANAGED_KEY) != null }
+            val managedByUrl = managed.groupBy { it.url }
+            val desiredUrls = desired.map { it.jdbcUrl }.toSet()
 
             for (svc in desired) {
-                val existing = managed[svc.managedId]
+                val existing = managedByUrl[svc.jdbcUrl].orEmpty()
+
+                // Clean up any duplicate data sources for this same connection (e.g.
+                // left by an earlier version that registered one per compose file).
+                existing.drop(1).forEach { dup ->
+                    runCatching { manager.removeDataSource(dup) }
+                        .onSuccess { removed.add(dup.name) }
+                        .onFailure { thisLogger().warn("Failed to remove duplicate ${dup.name}", it) }
+                }
+
+                val keep = existing.firstOrNull()
                 when {
-                    existing != null && matches(existing, svc) -> unchanged.add(svc)
-
-                    existing != null -> {
-                        // Service was modified: replace in place (keeps it tidy and
-                        // avoids needing per-field setters).
-                        runCatching {
-                            manager.removeDataSource(existing)
-                            register(manager, svc)
-                        }.onSuccess { updated.add(svc) }
-                            .onFailure { thisLogger().warn("Failed to update ${svc.dataSourceName}", it) }
-                    }
-
-                    // Not managed by us, but a data source with this URL already
-                    // exists (e.g. user-created). Leave it alone, don't duplicate.
-                    svc.jdbcUrl in existingUrls -> unchanged.add(svc)
-
-                    else -> runCatching { register(manager, svc) }
+                    keep == null -> runCatching { register(manager, svc) }
                         .onSuccess { added.add(svc) }
                         .onFailure { thisLogger().warn("Failed to register ${svc.dataSourceName}", it) }
+
+                    needsUpdate(keep, svc) -> runCatching {
+                        manager.removeDataSource(keep)
+                        register(manager, svc)
+                    }.onSuccess { updated.add(svc) }
+                        .onFailure { thisLogger().warn("Failed to update ${svc.dataSourceName}", it) }
+
+                    else -> unchanged.add(svc)
                 }
             }
 
-            // Remove our data sources whose service no longer exists — but only if the
-            // scan actually found compose files, so a premature/empty scan never wipes
-            // everything.
+            // Remove our data sources whose connection is no longer declared — but only
+            // if the scan actually found compose files, so a premature/empty scan never
+            // wipes everything.
             if (filesScanned > 0) {
-                for ((id, ds) in managed) {
-                    if (id !in desiredIds) {
+                for (ds in managed) {
+                    if (ds.url !in desiredUrls) {
                         runCatching { manager.removeDataSource(ds) }
                             .onSuccess { removed.add(ds.name) }
                             .onFailure { thisLogger().warn("Failed to remove ${ds.name}", it) }
@@ -114,28 +119,36 @@ class ComposeSyncService(private val project: Project) {
         return SyncResult(filesScanned, added, updated, removed, unchanged)
     }
 
-    private fun matches(existing: LocalDataSource, svc: PostgresService): Boolean {
-        return existing.url == svc.jdbcUrl && existing.username == svc.user
+    /** A kept data source needs recreating if its user changed or its stored password is missing/stale. */
+    private fun needsUpdate(existing: LocalDataSource, svc: PostgresService): Boolean {
+        if (existing.username != svc.user) return true
+        // Heal data sources whose password was never persisted (older versions).
+        if (svc.password != null && storedPassword(existing) != svc.password) return true
+        return false
     }
 
+    private fun storedPassword(ds: LocalDataSource): String? =
+        runCatching { DatabaseCredentialsAuthProvider.getCredentials(ds)?.getPasswordAsString() }.getOrNull()
+
     private fun register(manager: LocalDataSourceManager, svc: PostgresService) {
-        val registry = DataSourceRegistry(project)
-        val builder = registry.builder
+        val credentials = DatabaseCredentials.getInstance()
+        val registry = DataSourceRegistry(project, credentials)
+        registry.builder
             .withName(svc.dataSourceName)
             .withGroupName(GROUP_NAME)
             .withDriverClass(postgresDriverClass)
             .withUrl(svc.jdbcUrl)
             .withUser(svc.user)
-        if (svc.password != null) builder.withPassword(svc.password)
-        builder.commit()
+            .commit()
 
         for (dataSource in registry.newDataSources) {
             // Tag so we can recognize and reconcile it later.
-            dataSource.setAdditionalProperty(MANAGED_KEY, svc.managedId)
-            // Compose passwords are plaintext in the file already, so persist them
-            // into the credential store rather than prompting on first connect.
+            dataSource.setAdditionalProperty(MANAGED_KEY, MANAGED_VALUE)
+            // Compose passwords are plaintext in the file already, so persist them into
+            // the credential store rather than prompting on first connect.
             if (svc.password != null) {
                 dataSource.setPasswordStorage(LocalDataSource.Storage.PERSIST)
+                credentials.storePassword(dataSource, OneTimeString(svc.password))
             }
             manager.addDataSource(dataSource)
         }
@@ -147,8 +160,11 @@ class ComposeSyncService(private val project: Project) {
     }
 
     companion object {
-        /** Additional-property key marking a data source as created/owned by this plugin. */
+        // Additional-property key marking a data source as created/owned by this plugin.
+        // Kept stable (the legacy name) so data sources tagged by earlier versions are
+        // still recognized and reconciled.
         const val MANAGED_KEY = "dockerComposeDatasource.managedId"
+        private const val MANAGED_VALUE = "true"
 
         /** Group folder the plugin's data sources are placed under in the tool window. */
         const val GROUP_NAME = "Docker Compose"
